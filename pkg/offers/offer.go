@@ -2,8 +2,6 @@ package offers
 
 import (
 	"database/sql"
-	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -71,23 +69,6 @@ func CreateOffer(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to create offer"})
 	}
 
-	// Create a chat for this offer
-	var chatID int
-	chatQuery := `INSERT INTO chats (task_id, customer_id, provider_id, offer_id) 
-	              VALUES ($1, $2, $3, $4) RETURNING id`
-	err = db.DB.QueryRow(chatQuery, taskID, customerID, providerID, offerID).Scan(&chatID)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to create chat"})
-	}
-
-	// Send initial message about the offer
-	messageText := fmt.Sprintf("I'm interested in your task and would like to offer my services for $%.2f. %s", offeredPrice, message)
-	_, err = db.DB.Exec(`INSERT INTO messages (chat_id, sender_id, message_text, message_type) 
-	                  VALUES ($1, $2, $3, $4)`, chatID, providerID, messageText, "OFFER_UPDATE")
-	if err != nil {
-		log.Printf("Failed to create initial message: %v", err)
-	}
-
 	offer := Offer{
 		ID:           offerID,
 		TaskID:       taskID,
@@ -100,6 +81,76 @@ func CreateOffer(c echo.Context) error {
 	}
 
 	return c.JSON(http.StatusCreated, offer)
+}
+
+// Update an existing offer
+func UpdateOffer(c echo.Context) error {
+	offerIDStr := c.Param("offer_id")
+	offerID, err := strconv.Atoi(offerIDStr)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid offer_id format"})
+	}
+
+	// Get the existing offer to verify ownership and status
+	var existingOffer Offer
+	query := `SELECT id, task_id, provider_id, offered_price, message, status, created_at, updated_at
+	          FROM offers WHERE id = $1`
+	err = db.DB.QueryRow(query, offerID).Scan(&existingOffer.ID, &existingOffer.TaskID, 
+		&existingOffer.ProviderID, &existingOffer.OfferedPrice, &existingOffer.Message,
+		&existingOffer.Status, &existingOffer.CreatedAt, &existingOffer.UpdatedAt)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return c.JSON(http.StatusNotFound, echo.Map{"error": "Offer not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to fetch offer"})
+	}
+
+	// Only allow updates if offer is still pending
+	if existingOffer.Status != "PENDING" {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Cannot update offer that is not in pending status"})
+	}
+
+	// Get updated fields from request
+	offeredPriceStr := c.FormValue("offered_price")
+	message := c.FormValue("message")
+
+	// Use existing values if not provided
+	updatedPrice := existingOffer.OfferedPrice
+	updatedMessage := existingOffer.Message
+
+	if offeredPriceStr != "" {
+		updatedPrice, err = strconv.ParseFloat(offeredPriceStr, 64)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid offered_price format"})
+		}
+	}
+
+	if message != "" {
+		updatedMessage = message
+	}
+
+	// Update the offer
+	var updatedAt time.Time
+	updateQuery := `UPDATE offers SET offered_price = $1, message = $2, updated_at = CURRENT_TIMESTAMP 
+	                WHERE id = $3 RETURNING updated_at`
+	err = db.DB.QueryRow(updateQuery, updatedPrice, updatedMessage, offerID).Scan(&updatedAt)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update offer"})
+	}
+
+	// Return updated offer
+	updatedOffer := Offer{
+		ID:           existingOffer.ID,
+		TaskID:       existingOffer.TaskID,
+		ProviderID:   existingOffer.ProviderID,
+		OfferedPrice: updatedPrice,
+		Message:      updatedMessage,
+		Status:       existingOffer.Status,
+		CreatedAt:    existingOffer.CreatedAt,
+		UpdatedAt:    updatedAt.Format(time.RFC3339),
+	}
+
+	return c.JSON(http.StatusOK, updatedOffer)
 }
 
 // Get all offers for a task
@@ -189,22 +240,6 @@ func AcceptOffer(c echo.Context) error {
 	                  WHERE task_id = $1 AND id != $2`, offer.TaskID, offerID)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to reject other offers"})
-	}
-
-	// Deactivate all other chats for this task
-	_, err = tx.Exec(`UPDATE chats SET is_active = false 
-	                  WHERE task_id = $1 AND offer_id != $2`, offer.TaskID, offerID)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to deactivate chats"})
-	}
-
-	// Add system message to the accepted chat
-	var acceptedChatID int
-	err = tx.QueryRow(`SELECT id FROM chats WHERE offer_id = $1`, offerID).Scan(&acceptedChatID)
-	if err == nil {
-		_, err = tx.Exec(`INSERT INTO messages (chat_id, sender_id, message_text, message_type) 
-		                  VALUES ($1, $2, $3, $4)`, acceptedChatID, customerID,
-			"Congratulations! Your offer has been accepted. Let's get started!", "SYSTEM")
 	}
 
 	// Commit transaction
