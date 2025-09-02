@@ -24,4 +24,7 @@ func RegisterRoutes(e *echo.Echo) {
 	e.GET("/tasks/:task_id/offers", offers.GetTaskOffers)
 	e.POST("/offers/:offer_id/accept", offers.AcceptOffer)
 	e.PUT("/offers/:offer_id", offers.UpdateOffer)
+
+	// Notification routes
+	e.POST("/notifications/register-token", notifications.RegisterDeviceToken)
 }
