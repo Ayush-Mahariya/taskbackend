@@ -129,3 +129,35 @@ message=I can complete it by tomorrow.
 **Example:** `/offers/5/accept`
 
 ---
+
+## 🔔 Notification Routes
+
+### Register Device Token  
+**POST** `/notifications/register-token`  
+**Content-Type:** `application/json`  
+
+**JSON Body:**
+```json
+{
+  "profile_id": 1,
+  "token": "fcm-token-or-apns-token-here",
+  "platform": "android"
+}
+```
+
+**Parameters:**
+- `profile_id`: int (required) - User profile ID  
+- `token`: string (required) - FCM/APNs device token  
+- `platform`: string (required) - "android", "ios", or "web"
+
+**Response:**
+```json
+{
+  "message": "Device token registered successfully",
+  "token_id": 5
+}
+```
+
+**Note:** Links device tokens to profiles for push notifications. Updates existing token if profile+platform already exists.
+
+---
