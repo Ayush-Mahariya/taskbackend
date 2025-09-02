@@ -10,7 +10,11 @@ import (
 
 	"github.com/labstack/echo/v4"
 )
-
+// UpdateOfferRequest represents the JSON request body for updating an offer
+type UpdateOfferRequest struct {
+	OfferedPrice *float64 `json:"offered_price,omitempty"`
+	Message      *string  `json:"message,omitempty"`
+}
 // Create an offer for a task
 func CreateOffer(c echo.Context) error {
 	taskIDStr := c.FormValue("task_id")
@@ -91,6 +95,17 @@ func UpdateOffer(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid offer_id format"})
 	}
 
+	// Parse JSON request body
+	var req UpdateOfferRequest
+	if err := c.Bind(&req); err != nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid JSON format"})
+	}
+
+	// Validate that at least one field is provided
+	if req.OfferedPrice == nil && req.Message == nil {
+		return c.JSON(http.StatusBadRequest, echo.Map{"error": "At least one field (offered_price or message) must be provided"})
+	}
+
 	// Get the existing offer to verify ownership and status
 	var existingOffer Offer
 	query := `SELECT id, task_id, provider_id, offered_price, message, status, created_at, updated_at
@@ -110,23 +125,16 @@ func UpdateOffer(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, echo.Map{"error": "Cannot update offer that is not in pending status"})
 	}
 
-	// Get updated fields from request
-	offeredPriceStr := c.FormValue("offered_price")
-	message := c.FormValue("message")
-
-	// Use existing values if not provided
+	// Use existing values if not provided, otherwise use new values
 	updatedPrice := existingOffer.OfferedPrice
 	updatedMessage := existingOffer.Message
 
-	if offeredPriceStr != "" {
-		updatedPrice, err = strconv.ParseFloat(offeredPriceStr, 64)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, echo.Map{"error": "Invalid offered_price format"})
-		}
+	if req.OfferedPrice != nil {
+		updatedPrice = *req.OfferedPrice
 	}
 
-	if message != "" {
-		updatedMessage = message
+	if req.Message != nil {
+		updatedMessage = *req.Message
 	}
 
 	// Update the offer
