@@ -11,42 +11,41 @@ import (
 )
 
 func NotifyServiceProviders(taskID int) {
-	// Fetch all profiles with SERVICE_PROVIDER role
-	rows, err := db.DB.Query(`SELECT id FROM profiles WHERE role = 'SERVICE_PROVIDER'`)
-	if err != nil {
-		log.Printf("Failed to fetch service providers: %v\n", err)
-		return
-	}
-	defer rows.Close()
+    query := `
+        SELECT p.id, 
+               COALESCE(array_agg(dt.token) FILTER (WHERE dt.token IS NOT NULL), '{}') as tokens
+        FROM profiles p 
+        LEFT JOIN device_tokens dt ON p.id = dt.profile_id AND dt.is_active = true
+        WHERE p.role = 'SERVICE_PROVIDER'
+        GROUP BY p.id`
+    
+    rows, err := db.DB.Query(query)
+    if err != nil {
+        log.Printf("Failed to fetch service providers: %v\n", err)
+        return
+    }
+    defer rows.Close()
 
-	for rows.Next() {
-		var profileID int
-		err = rows.Scan(&profileID)
-		if err != nil {
-			log.Printf("Failed to scan profile ID: %v\n", err)
-			continue
-		}
-
-		// Get active tokens for this profile
-		tokenRows, err := db.DB.Query(`SELECT token FROM device_tokens WHERE profile_id = $1 AND is_active = true`, profileID)
-		if err != nil {
-			log.Printf("Failed to fetch tokens for profile %d: %v\n", profileID, err)
-			continue
-		}
-
-		for tokenRows.Next() {
-			var token string
-			err = tokenRows.Scan(&token)
-			if err != nil {
-				log.Printf("Failed to scan token: %v\n", err)
-				continue
-			}
-
-			// Mock notification sending
-			log.Printf("Mocking Notification for task id %d, profile id %d\n", taskID, profileID)
-		}
-		tokenRows.Close()
-	}
+    totalNotifications := 0
+    for rows.Next() {
+        var profileID int
+        var tokens []string
+        
+        err = rows.Scan(&profileID, pq.Array(&tokens))
+        if err != nil {
+            log.Printf("Failed to scan row: %v\n", err)
+            continue
+        }
+        
+        for _, token := range tokens {
+            if token != "" {
+                log.Printf("Mocking Notification for task id %d, profile id %d\n", taskID, profileID)
+                totalNotifications++
+            }
+        }
+    }
+    
+    log.Printf("Total notifications sent: %d\n", totalNotifications)
 }
 
 func RegisterDeviceToken(c echo.Context) error {
