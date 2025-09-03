@@ -133,7 +133,7 @@ message=I can complete it by tomorrow.
 ## 🔔 Notification Routes
 
 ### Register Device Token  
-**POST** `/notifications/register-token`  
+**POST** `/notifications/fcm/token`  
 **Content-Type:** `application/json`  
 
 **JSON Body:**
@@ -148,13 +148,12 @@ message=I can complete it by tomorrow.
 **Parameters:**
 - `profile_id`: int (required) - User profile ID  
 - `token`: string (required) - FCM/APNs device token  
-- `platform`: string (required) - "android", "ios", or "web"
+- `platform`: string (optional) - "android", "ios", or "web"
 
 **Response:**
 ```json
 {
   "message": "Device token registered successfully",
-  "token_id": 5
 }
 ```
 
