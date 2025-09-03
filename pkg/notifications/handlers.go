@@ -2,12 +2,52 @@ package notifications
 
 import (
 	"database/sql"
+	"log"
 	"net/http"
 	"task-panda/pkg/db"
 	"time"
 
 	"github.com/labstack/echo/v4"
 )
+
+func NotifyServiceProviders(taskID int) {
+	// Fetch all profiles with SERVICE_PROVIDER role
+	rows, err := db.DB.Query(`SELECT id FROM profiles WHERE role = 'SERVICE_PROVIDER'`)
+	if err != nil {
+		log.Printf("Failed to fetch service providers: %v\n", err)
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var profileID int
+		err = rows.Scan(&profileID)
+		if err != nil {
+			log.Printf("Failed to scan profile ID: %v\n", err)
+			continue
+		}
+
+		// Get active tokens for this profile
+		tokenRows, err := db.DB.Query(`SELECT token FROM device_tokens WHERE profile_id = $1 AND is_active = true`, profileID)
+		if err != nil {
+			log.Printf("Failed to fetch tokens for profile %d: %v\n", profileID, err)
+			continue
+		}
+
+		for tokenRows.Next() {
+			var token string
+			err = tokenRows.Scan(&token)
+			if err != nil {
+				log.Printf("Failed to scan token: %v\n", err)
+				continue
+			}
+
+			// Mock notification sending
+			log.Printf("Mocking Notification for task id %d, profile id %d\n", taskID, profileID)
+		}
+		tokenRows.Close()
+	}
+}
 
 func RegisterDeviceToken(c echo.Context) error {
 	var req RegisterTokenRequest
@@ -49,7 +89,7 @@ func RegisterDeviceToken(c echo.Context) error {
 		}
 
 		return c.JSON(http.StatusCreated, echo.Map{
-			"message":  "Device token registered successfully",
+			"message": "Device token registered successfully",
 		})
 	} else if err == nil {
 		// Update existing token
