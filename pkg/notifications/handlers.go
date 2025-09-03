@@ -50,7 +50,6 @@ func RegisterDeviceToken(c echo.Context) error {
 
 		return c.JSON(http.StatusCreated, echo.Map{
 			"message":  "Device token registered successfully",
-			"token_id": tokenID,
 		})
 	} else if err == nil {
 		// Update existing token
