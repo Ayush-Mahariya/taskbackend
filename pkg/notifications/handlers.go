@@ -16,16 +16,9 @@ func RegisterDeviceToken(c echo.Context) error {
 	}
 
 	// Validate required fields
-	if req.ProfileID == 0 || req.Token == "" || req.Platform == "" {
+	if req.ProfileID == 0 || req.Token == "" {
 		return c.JSON(http.StatusBadRequest, echo.Map{
-			"error": "profile_id, token, and platform are required",
-		})
-	}
-
-	// Validate platform
-	if req.Platform != "android" && req.Platform != "ios" && req.Platform != "web" {
-		return c.JSON(http.StatusBadRequest, echo.Map{
-			"error": "platform must be one of: android, ios, web",
+			"error": "profile_id, and token are required",
 		})
 	}
 
@@ -41,8 +34,8 @@ func RegisterDeviceToken(c echo.Context) error {
 
 	// Check if token already exists for this profile and platform
 	var existingTokenID int
-	err = db.DB.QueryRow(`SELECT id FROM device_tokens WHERE profile_id = $1 AND platform = $2 AND is_active = true`, 
-		req.ProfileID, req.Platform).Scan(&existingTokenID)
+	err = db.DB.QueryRow(`SELECT id FROM device_tokens WHERE profile_id = $1 AND is_active = true`,
+		req.ProfileID).Scan(&existingTokenID)
 
 	if err == sql.ErrNoRows {
 		// Create new token
@@ -56,12 +49,12 @@ func RegisterDeviceToken(c echo.Context) error {
 		}
 
 		return c.JSON(http.StatusCreated, echo.Map{
-			"message": "Device token registered successfully",
+			"message":  "Device token registered successfully",
 			"token_id": tokenID,
 		})
 	} else if err == nil {
 		// Update existing token
-		_, err = db.DB.Exec(`UPDATE device_tokens SET token = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`, 
+		_, err = db.DB.Exec(`UPDATE device_tokens SET token = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
 			req.Token, existingTokenID)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Failed to update token"})
@@ -69,7 +62,6 @@ func RegisterDeviceToken(c echo.Context) error {
 
 		return c.JSON(http.StatusOK, echo.Map{
 			"message": "Device token updated successfully",
-			"token_id": existingTokenID,
 		})
 	} else {
 		return c.JSON(http.StatusInternalServerError, echo.Map{"error": "Database error"})
