@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"task-panda/pkg/db"
 	"time"
-
+	"github.com/lib/pq"
 	"github.com/labstack/echo/v4"
 )
 
